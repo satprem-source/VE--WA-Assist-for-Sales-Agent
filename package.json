@@ -1,0 +1,19 @@
+{
+  "name": "whatsapp-nb-prototype",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "WhatsApp-based new business module prototype: need analysis, product comparison, lead tracking, benefit illustration sharing (Tata AIA catalogue, indicative values).",
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "dev": "concurrently -n api,web -c blue,green \"npm run dev -w @nb/mock-api\" \"npm run dev -w @nb/web\"",
+    "dev:api": "npm run dev -w @nb/mock-api",
+    "dev:web": "npm run dev -w @nb/web",
+    "build": "npm run build -w @nb/web",
+    "test": "node --test \"packages/shared/test/*.test.js\" \"apps/mock-api/test/*.test.js\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  },
+  "engines": { "node": ">=20" }
+}

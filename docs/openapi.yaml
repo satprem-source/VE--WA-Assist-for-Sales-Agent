@@ -1,0 +1,186 @@
+openapi: 3.0.3
+info:
+  title: WhatsApp New Business — mock API
+  version: 0.1.0
+  description: |
+    Mock API behind the prototype. All illustration values are indicative placeholders
+    (source = indicative-placeholder). Production swaps generateIllustration for insurer quote APIs
+    while keeping the Illustration schema.
+servers:
+  - url: http://localhost:4000
+paths:
+  /api/health:
+    get: { summary: Health and demo clock, responses: { '200': { description: OK } } }
+  /api/products:
+    get:
+      summary: Catalogue (offered plans + bundle components)
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: object, properties: { products: { type: array, items: { $ref: '#/components/schemas/Product' } }, components: { type: array, items: { $ref: '#/components/schemas/Product' } } } } } } } }
+  /api/products/{id}:
+    get:
+      summary: One plan by id or UIN, with illustration input fields and defaults
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: OK }, '404': { description: Not found } }
+  /api/leads:
+    get:
+      summary: List leads (most recently updated first), with stale flag
+      parameters: [{ name: agentId, in: query, schema: { type: string } }]
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Lead' } } } } } }
+    post:
+      summary: Create lead
+      requestBody: { content: { application/json: { schema: { type: object, required: [name, mobile], properties: { name: { type: string }, mobile: { type: string, pattern: '^\d{10}$' }, source: { type: string }, note: { type: string }, agentId: { type: string } } } } } }
+      responses: { '201': { description: Created }, '400': { description: Invalid } }
+  /api/leads/{id}:
+    get:
+      summary: Lead with illustration summaries
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: OK }, '404': { description: Not found } }
+    patch:
+      summary: Manual stage change / lost reason / note
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { stage: { $ref: '#/components/schemas/Stage' }, lostReason: { type: string }, note: { type: string } } } } } }
+      responses: { '200': { description: OK } }
+  /api/conversations/{key}:
+    get:
+      summary: Messages for customer:<leadId> or agent:<agentId>
+      parameters: [{ name: key, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Message' } } } } } }
+  /api/conversations/{key}/inbound:
+    post:
+      summary: Simulated inbound from a phone; runs the bot and returns outbound messages
+      parameters: [{ name: key, in: path, required: true, schema: { type: string } }]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { inbound: { $ref: '#/components/schemas/Inbound' } } } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: object, properties: { messages: { type: array, items: { $ref: '#/components/schemas/Message' } } } } } } } }
+  /api/needs/analyse:
+    post:
+      summary: Stateless need analysis
+      requestBody: { content: { application/json: { schema: { type: object, properties: { profile: { $ref: '#/components/schemas/Profile' }, goals: { type: array, items: { $ref: '#/components/schemas/Goal' } }, risk: { type: string, enum: [low, moderate, high] } } } } } }
+      responses: { '200': { description: NeedAnalysis } }
+  /api/compare:
+    post:
+      summary: Indicative side-by-side of two plans
+      requestBody: { content: { application/json: { schema: { type: object, properties: { a: { type: string }, b: { type: string }, profile: { $ref: '#/components/schemas/Profile' } } } } } }
+      responses: { '200': { description: OK } }
+  /api/illustrations:
+    post:
+      summary: Create illustration (stored if leadId given, else stateless preview)
+      requestBody: { content: { application/json: { schema: { type: object, properties: { leadId: { type: string }, productId: { type: string }, inputs: { type: object }, share: { type: boolean } } } } } }
+      responses: { '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Illustration' } } } } }
+  /api/illustrations/{id}:
+    get: { summary: Illustration JSON, parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { '200': { description: OK } } }
+  /api/illustrations/{id}.pdf:
+    get: { summary: Watermarked PDF, parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { '200': { description: PDF, content: { application/pdf: {} } } } }
+  /api/illustrations/{id}/share:
+    post: { summary: Send to customer (409 if not opted in), parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { '200': { description: OK }, '409': { description: No consent } } }
+  /api/illustrations/{id}/ack:
+    post: { summary: Record customer acknowledgement (not a signature), parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { '200': { description: OK } } }
+  /api/stream:
+    get: { summary: 'SSE: events message, lead, clock, reset', responses: { '200': { description: text/event-stream } } }
+  /api/demo/clock:
+    post: { summary: Advance demo clock, requestBody: { content: { application/json: { schema: { type: object, properties: { hours: { type: number } } } } } }, responses: { '200': { description: OK } } }
+  /api/demo/reset:
+    post: { summary: Reseed demo data, responses: { '200': { description: OK } } }
+  /webhook/whatsapp:
+    get: { summary: Cloud API verification (hub.challenge), responses: { '200': { description: OK } } }
+    post: { summary: Cloud API inbound webhook (matched to lead/agent by mobile), responses: { '200': { description: OK } } }
+components:
+  schemas:
+    Stage: { type: string, enum: [new, needs_done, quote_shared, bi_shared, proposal, issued, lost] }
+    Goal: { type: string, enum: [protection, child_education, retirement, wealth, regular_income, health] }
+    Product:
+      type: object
+      properties:
+        id: { type: string }
+        uin: { type: string, description: Exact UIN; bundles join component UINs with + }
+        name: { type: string }
+        insurer: { type: string }
+        category: { type: string, enum: [term, savings_nonpar, savings_par, ulip, ulip_pension, annuity, health, bundle] }
+        regulatoryType: { type: string }
+        goals: { type: array, items: { $ref: '#/components/schemas/Goal' } }
+        highlights: { type: array, items: { type: string } }
+        bundle: { type: object, properties: { components: { type: array, items: { type: string } } } }
+        marketLinked: { type: boolean }
+        sellOnlineUrl: { type: string }
+        indicativeEligibility: { type: object, description: Placeholder }
+    Profile:
+      type: object
+      properties:
+        age: { type: integer }
+        gender: { type: string, enum: [male, female] }
+        maritalStatus: { type: string }
+        dependents: { type: integer }
+        youngestChildAge: { type: integer, nullable: true }
+        annualIncome: { type: number }
+        monthlyExpenses: { type: number }
+        liabilities: { type: number }
+        existingCover: { type: number }
+        retirementAge: { type: integer }
+        tobacco: { type: boolean }
+    Lead:
+      type: object
+      properties:
+        id: { type: string }
+        agentId: { type: string }
+        name: { type: string }
+        mobile: { type: string }
+        source: { type: string }
+        stage: { $ref: '#/components/schemas/Stage' }
+        consent: { type: object, properties: { given: { type: boolean }, at: { type: string, format: date-time }, withdrawnAt: { type: string } } }
+        profile: { $ref: '#/components/schemas/Profile' }
+        goals: { type: array, items: { $ref: '#/components/schemas/Goal' } }
+        risk: { type: string }
+        needs: { type: object, description: NeedAnalysis result (gaps, recommendations) }
+        recommendedProductIds: { type: array, items: { type: string } }
+        illustrationIds: { type: array, items: { type: string } }
+        timeline: { type: array, items: { type: object, properties: { ts: { type: string }, type: { type: string }, text: { type: string } } } }
+        stale: { type: object, nullable: true, properties: { hoursIdle: { type: integer }, reason: { type: string } } }
+    Inbound:
+      type: object
+      required: [type]
+      properties:
+        type: { type: string, enum: [text, button_reply, list_reply, flow_submit] }
+        text: { type: string }
+        id: { type: string }
+        title: { type: string }
+        flowId: { type: string }
+        data: { type: object }
+    Message:
+      type: object
+      properties:
+        id: { type: string }
+        dir: { type: string, enum: [in, out] }
+        ts: { type: string, format: date-time }
+        type: { type: string, enum: [text, buttons, list, flow, document, reply] }
+        text: { type: string }
+        buttons: { type: array, maxItems: 3, items: { type: object, properties: { id: { type: string }, title: { type: string, maxLength: 20 } } } }
+        list: { type: object }
+        flow: { type: object }
+        document: { type: object, properties: { illustrationId: { type: string }, filename: { type: string }, url: { type: string } } }
+        meta: { type: object, properties: { template: { type: string }, sessionWindow: { type: string, enum: [open, closed] }, cloudApiPreview: { type: object } } }
+    Illustration:
+      type: object
+      properties:
+        illustrationId: { type: string }
+        leadId: { type: string }
+        productId: { type: string }
+        productName: { type: string }
+        uin: { type: string }
+        ceCategory: { type: string, enum: [ulip, traditional, terminsurance] }
+        source: { type: string, enum: [indicative-placeholder, insurer-quote-api] }
+        watermark: { type: string }
+        disclaimer: { type: string }
+        notes: { type: array, items: { type: string } }
+        inputs: { type: object }
+        premium: { type: object, properties: { annual: { type: number }, modal: { type: number }, frequency: { type: string } } }
+        scenarios:
+          type: array
+          items:
+            type: object
+            properties:
+              key: { type: string, enum: [guaranteed, r4, r8, benefit] }
+              label: { type: string }
+              irr: { type: number, nullable: true }
+              maturityBenefit: { type: number }
+              rows: { type: array, items: { type: object, properties: { year: { type: integer }, age: { type: integer }, premiumPaid: { type: number }, fundValue: { type: number }, survivalBenefit: { type: number }, annuityPayout: { type: number }, deathBenefit: { type: number }, surrenderValue: { type: number } } } }
+        components: { type: array, description: Present for bundles; one illustration per component UIN, items: { type: object } }
+        sharedAt: { type: string, nullable: true }
+        acknowledgedAt: { type: string, nullable: true }
